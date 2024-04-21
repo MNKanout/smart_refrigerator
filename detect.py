@@ -22,6 +22,16 @@ from tflite_support.task import processor
 from tflite_support.task import vision
 import utils
 
+from mqtt_service import validate_categories, get_detected_categories
+import paho.mqtt.publish as publish
+from paho import mqtt
+
+MQTT_HOSTNAME = '1c788dbd69ae42b9ac5c457be3666c3f.s1.eu.hivemq.cloud'
+
+MQTT_AUTH = {
+  'username': 'refrigerator',
+  'password': 'A12345678a',
+}
 
 def run(model: str, camera_id: int, width: int, height: int, num_threads: int,
         enable_edgetpu: bool) -> None:
@@ -81,6 +91,21 @@ def run(model: str, camera_id: int, width: int, height: int, num_threads: int,
 
     # Run object detection estimation using the model.
     detection_result = detector.detect(input_tensor)
+
+    # Publish detected categories to MQTT broker
+    if (len(detection_result.detections)) >= 1:
+      detected_categories = get_detected_categories(detection_result)
+      validated_categoires = validate_categories(detected_categories)
+      if (validated_categoires):
+        publish.single(
+          hostname=MQTT_HOSTNAME,
+          port=8883,
+          topic='refrigerator/stock',
+          payload=','.join(validated_categoires),
+          auth=MQTT_AUTH,
+          tls={"tls_version": mqtt.client.ssl.PROTOCOL_TLS},
+          qos=1
+        )
 
     # Draw keypoints and edges on input image
     image = utils.visualize(image, detection_result)
